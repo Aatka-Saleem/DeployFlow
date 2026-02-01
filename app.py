@@ -8,6 +8,10 @@ import json
 import sys
 import os
 
+# Load environment variables from Streamlit secrets
+os.environ["WATSONX_URL"] = st.secrets["WATSONX_URL"]
+os.environ["WATSONX_APIKEY"] = st.secrets["WATSONX_APIKEY"]
+
 # Add agents directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'agents'))
 
