@@ -1,0 +1,28 @@
+# This is a template - variables will be replaced by the Coder Agent
+# Variables: {NODE_VERSION}, {PORT}, {MAIN_FILE}
+
+FROM node:{NODE_VERSION}-alpine
+
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+RUN chown -R nodejs:nodejs /app
+USER nodejs
+
+# Expose application port
+EXPOSE {PORT}
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT={PORT}
+
+# Start Node.js application
+CMD ["node", "{MAIN_FILE}"]

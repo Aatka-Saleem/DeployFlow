@@ -1,0 +1,39 @@
+FROM python:{{python_version}}-slim
+
+WORKDIR /app
+
+# Install system dependencies if needed
+{{#if system_deps}}
+RUN apt-get update && apt-get install -y \
+    {{system_deps}} \
+    && rm -rf /var/lib/apt/lists/*
+{{/if}}
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Expose application port
+EXPOSE {{port}}
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PORT={{port}}
+
+{{#if is_flask}}
+# Run Flask app with gunicorn
+CMD ["gunicorn", "-b", "0.0.0.0:{{port}}", "--workers", "{{workers}}", "{{app_module}}:app"]
+{{else if is_fastapi}}
+# Run FastAPI with uvicorn
+CMD ["uvicorn", "{{app_module}}:app", "--host", "0.0.0.0", "--port", "{{port}}"]
+{{else}}
+# Run Python application
+CMD ["python", "{{main_file}}"]
+{{/if}}

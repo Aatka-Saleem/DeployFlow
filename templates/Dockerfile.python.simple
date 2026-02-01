@@ -1,0 +1,27 @@
+# This is a template - variables will be replaced by the Coder Agent
+# Variables: {PYTHON_VERSION}, {PORT}, {APP_MODULE}, {WORKERS}
+
+FROM python:{PYTHON_VERSION}-slim
+
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN useradd -m -u 1001 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Expose application port
+EXPOSE {PORT}
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT={PORT}
+
+# Run application with gunicorn (production server)
+CMD ["gunicorn", "-b", "0.0.0.0:{PORT}", "--workers", "{WORKERS}", "{APP_MODULE}:app"]

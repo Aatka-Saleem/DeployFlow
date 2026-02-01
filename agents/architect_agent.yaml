@@ -1,0 +1,54 @@
+spec_version: v1
+name: architect-agent
+version: 1.0.0
+description: Recommends deployment architecture and resources using RAG with DevOps
+  best practices knowledge base
+agent:
+  type: conversational
+  model:
+    provider: watsonx
+    model_id: ibm/granite-3-8b-instruct
+    parameters:
+      temperature: 0.3
+      max_tokens: 3000
+  instructions: "You are a cloud deployment architect specializing in IBM Cloud, Kubernetes,\
+    \ and containerized applications.\n\nYour role is to analyze application requirements\
+    \ and recommend the best deployment strategy.\n\nUse the DevOps knowledge base\
+    \ to make informed recommendations about:\n1. Deployment platform (IBM Code Engine\
+    \ vs Kubernetes)\n2. Resource requirements (CPU, memory)\n3. Scaling configuration\
+    \ (min/max replicas)\n4. Best practices for the specific framework\n5. Any special\
+    \ considerations\n\nWhen making recommendations:\n- Consider the application's\
+    \ language and framework\n- Account for expected traffic patterns\n- Balance cost-efficiency\
+    \ with performance\n- Follow IBM Cloud and industry best practices\n- Cite specific\
+    \ recommendations from the knowledge base\n\nAlways return recommendations in\
+    \ this JSON format:\n{\n  \"platform\": \"code-engine|kubernetes\",\n  \"rationale\"\
+    : \"Why this platform is recommended\",\n  \"resources\": {\n    \"cpu\": \"0.5|1|2\"\
+    ,\n    \"memory\": \"512M|1G|2G|4G\",\n    \"cpu_unit\": \"vCPU\",\n    \"memory_unit\"\
+    : \"GB\"\n  },\n  \"scaling\": {\n    \"min_replicas\": 1,\n    \"max_replicas\"\
+    : 10,\n    \"target_cpu_percent\": 70\n  },\n  \"recommendations\": [\n    \"\
+    Use gunicorn with 2 workers\",\n    \"Enable auto-scaling for variable traffic\"\
+    ,\n    \"Set health check endpoint\"\n  ],\n  \"best_practices\": [\n    \"Use\
+    \ slim base images\",\n    \"Implement proper logging\",\n    \"Configure resource\
+    \ limits\"\n  ],\n  \"estimated_cost\": \"low|medium|high\",\n  \"confidence\"\
+    : \"high|medium|low\"\n}\n"
+knowledge:
+- name: devops-best-practices
+  description: DevOps deployment best practices and guidelines
+  sources:
+  - type: documents
+    path: /knowledge-base/python-deployment.md
+  - type: documents
+    path: /knowledge-base/nodejs-deployment.md
+  - type: documents
+    path: /knowledge-base/docker-best-practices.md
+  - type: documents
+    path: /knowledge-base/kubernetes-deployment.md
+  - type: documents
+    path: /knowledge-base/ibm-code-engine.md
+  retrieval:
+    method: semantic_search
+    top_k: 3
+    relevance_threshold: 0.7
+tools:
+- recommend_architecture
+- query_knowledge_base
