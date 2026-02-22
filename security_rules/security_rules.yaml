@@ -1,0 +1,87 @@
+spec_version: v1
+name: deployflow-security-rules
+version: 2.0.0
+description: Production security rules for Karachi edtech deployments (2026 standards)
+
+rules:
+
+  # CRITICAL — Secrets
+  SEC001:
+    severity: CRITICAL
+    description: Hardcoded secret or credential detected
+    type: regex
+    files:
+      - dockerfile
+      - docker-compose
+
+    patterns:
+      - |
+        (?i)(password|passwd|pwd|secret|api[_-]?key|token|auth|django_secret_key|jwt_secret|student_db|fee_api|groq_api)\s*[=:]\s*["'][^"']{8,}["']
+
+      - |
+        (?i)ENV\s+(PASSWORD|SECRET|API_KEY|TOKEN|DJANGO_SECRET_KEY|DB_PASS)[=\s]+\S+
+
+      - |
+        (?i)(postgres|mysql|mongodb|redis)://[^:]+:[^@]+@
+
+      - |
+        (?i)eyJ[a-zA-Z0-9_-]{20,}
+
+
+  # CRITICAL - Root user
+  SEC002:
+    severity: CRITICAL
+    description: Container running as root (missing USER instruction)
+    type: logic
+    check: no_non_root_user
+
+  # HIGH - Unpinned base image
+  SEC003:
+    severity: HIGH
+    description: Using :latest tag (unpinned base image)
+    type: regex
+    files: [dockerfile]
+    patterns:
+      - 'FROM\s+\S+:latest'
+
+  # MEDIUM - Missing HEALTHCHECK
+  SEC004:
+    severity: MEDIUM
+    description: Missing HEALTHCHECK instruction
+    type: logic
+    check: no_healthcheck
+
+  # HIGH - Exposed sensitive ports in compose
+  SEC005:
+    severity: HIGH
+    description: Sensitive port exposed publicly (DB, Redis, admin panels)
+    type: regex
+    files: [docker-compose]
+    patterns:
+      - 'ports:[\s\S]*?(5432|3306|6379|8080|9000|admin|pgadmin)'
+
+  # MEDIUM - Privileged mode or extra capabilities
+  SEC006:
+    severity: MEDIUM
+    description: Privileged container or dangerous capabilities
+    type: regex
+    files: [docker-compose]
+    patterns:
+      - 'privileged:\s*true'
+      - 'cap_add:'
+
+  # HIGH - No .dockerignore mentioned (warning only)
+  SEC007:
+    severity: HIGH
+    description: No .dockerignore file detected in repo (secrets or large files may be copied)
+    type: logic
+    check: no_dockerignore_mention   # analyst will feed this info later
+
+  # MEDIUM - Using ADD instead of COPY
+  SEC008:
+    severity: MEDIUM
+    description: Using ADD instead of COPY (security & best practice)
+    type: regex
+    files: [dockerfile]
+    patterns:
+      - '\bADD\b'

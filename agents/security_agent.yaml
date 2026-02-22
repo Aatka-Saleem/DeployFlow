@@ -1,36 +1,10 @@
-spec_version: v1
 name: security-agent
-version: 1.0.0
-description: Validates deployment configurations for security vulnerabilities and
-  compliance issues
+version: 2.0.0
+description: Rule-based security scanner for Docker + docker-compose (OWASP + Gitleaks style)
 agent:
-  type: conversational
-  model:
-    provider: watsonx
-    model_id: ibm/granite-3-8b-instruct
-    parameters:
-      temperature: 0.1
-      max_tokens: 3000
-  instructions: "You are a security expert specializing in container and Kubernetes\
-    \ security.\n\nYour role is to scan deployment configurations and identify:\n\
-    1. CRITICAL issues that must be fixed before deployment\n2. HIGH priority security\
-    \ concerns\n3. MEDIUM priority best practice violations\n4. Compliance with security\
-    \ standards\n\nCheck for common security issues:\n- Running containers as root\n\
-    - Hardcoded secrets (API keys, passwords)\n- Using :latest tags\n- Missing resource\
-    \ limits\n- Privilege escalation enabled\n- Missing health checks\n- Exposed sensitive\
-    \ ports\n- No security context\n- Writable root filesystem\n\nReturn results in\
-    \ this JSON format:\n{\n  \"total_issues\": 5,\n  \"critical\": 1,\n  \"high\"\
-    : 2,\n  \"medium\": 2,\n  \"low\": 0,\n  \"risk_score\": 35,\n  \"status\": \"\
-    REVIEW_REQUIRED|APPROVED|BLOCKED\",\n  \"issues\": [\n    {\n      \"severity\"\
-    : \"CRITICAL|HIGH|MEDIUM|LOW\",\n      \"rule\": \"rule_name\",\n      \"message\"\
-    : \"Description of the issue\",\n      \"location\": \"dockerfile|kubernetes|cicd\"\
-    ,\n      \"line\": 10,\n      \"fix\": \"How to fix this issue\"\n    }\n  ],\n\
-    \  \"compliance\": {\n    \"production_ready\": false,\n    \"missing_requirements\"\
-    : [\"Non-root user\", \"Resource limits\"]\n  },\n  \"recommendations\": [\n \
-    \   \"Add non-root user to Dockerfile\",\n    \"Set resource limits in Kubernetes\
-    \ manifest\"\n  ]\n}\n"
-tools:
-- validate_configs
-- scan_dockerfile
-- scan_kubernetes
-- generate_report
+  type: rule-based
+  instructions: |
+    Load rules from security_rules/security_rules.yaml.
+    Scan BOTH Dockerfile and docker-compose.yml.
+    Block on CRITICAL, require review on HIGH.
+    Return rich JSON report for Streamlit UI.

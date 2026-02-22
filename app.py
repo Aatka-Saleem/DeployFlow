@@ -1,288 +1,180 @@
-"""
-DeployFlow - Professional AI DevOps Automation
-Clean, minimal interface for hackathon demo
-"""
-
+# app.py
 import streamlit as st
 import json
-import sys
 import os
+import traceback
+from pathlib import Path
+from dotenv import load_dotenv
 
+# Import your agents (adjust paths if needed)
+from agents.analyst_agent import analyze_repository
+from agents.architect_agent import recommend_architecture
+from agents.coder_agent import generate_configs
+# from security_rules.security_scanner import SecurityScanner  # ← assuming this is the updated one
+from agents.security_agent import validate_configs
+load_dotenv()
 
-
-# Add agents directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'agents'))
-
-from agents.orchestrator_agent import DeployFlowOrchestrator
-
-# Page configuration
+# ────────────────────────────────────────────────
+# Page config & theme
+# ────────────────────────────────────────────────
 st.set_page_config(
-    page_title="DeployFlow",
+    page_title="DeployFlow — Karachi EdTech DevOps",
     page_icon="🚀",
-    layout="centered"
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://github.com/your-org/deployflow/issues',
+        'Report a bug': "https://github.com/your-org/deployflow/issues",
+        'About': "DeployFlow v1.0 • Intelligent Docker deployment for small EdTech teams"
+    }
 )
 
-# Custom CSS - Clean and professional
+# Custom CSS for better Karachi/edtech branding feel (optional)
 st.markdown("""
-<style>
-    .main-title {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #0066cc;
-        text-align: center;
-        margin-bottom: 0.5rem;
-    }
-    .subtitle {
-        text-align: center;
-        color: #666;
-        margin-bottom: 2rem;
-        font-size: 1.1rem;
-    }
-    .stButton>button {
-        width: 100%;
-        background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
-        color: white;
-        font-size: 1.1rem;
-        font-weight: 600;
-        padding: 0.75rem;
-        border: none;
-        border-radius: 8px;
-        margin-top: 1rem;
-    }
-    .stButton>button:hover {
-        background: linear-gradient(135deg, #0052a3 0%, #003d7a 100%);
-    }
-    .metric-card {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #0066cc;
-        margin: 0.5rem 0;
-    }
-</style>
+    <style>
+    .stApp { background: linear-gradient(135deg, #f0f4f8, #e0e7ff); }
+    .stButton>button { background-color: #4f46e5; color: white; border-radius: 8px; }
+    .stSuccess { background-color: #d1fae5; border-left: 6px solid #10b981; }
+    .stError   { background-color: #fee2e2; border-left: 6px solid #ef4444; }
+    </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
-if 'results' not in st.session_state:
-    st.session_state.results = None
-
-# Header
-st.markdown('<div class="main-title">🚀 DeployFlow</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">AI-Powered DevOps Configuration Generator</div>', unsafe_allow_html=True)
-
-# Simple input section
-st.markdown("### Repository Information")
-
-# Input method selection
-input_method = st.radio(
-    "Choose input method:",
-    ["📝 Manual Description", "🔗 GitHub URL"],
-    horizontal=True
-)
-
-# Quick examples in expander
-with st.expander("💡 Click here for example inputs"):
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Flask API Example"):
-            st.session_state.example = "flask"
-    with col2:
-        if st.button("Express.js Example"):
-            st.session_state.example = "express"
-
-if input_method == "📝 Manual Description":
-    # Main input
-    repo_description = st.text_area(
-        "Describe your application:",
-        value="""Language: Python 3.11
-Framework: Flask
-Database: PostgreSQL
-
-Dependencies:
-flask==2.3.0
-gunicorn==20.1.0
-psycopg2-binary==2.9.5
-
-Files: app.py, requirements.txt""" if 'example' not in st.session_state or st.session_state.get('example') == 'flask' else """Language: Node.js 18
-Framework: Express
-Database: MongoDB
-
-Dependencies:
-express
-mongoose
-dotenv
-
-Files: server.js, package.json""",
-        height=200,
-        help="Paste your requirements.txt or package.json, or describe your app"
-    )
-else:  # GitHub URL
-    github_url = st.text_input(
-        "GitHub Repository URL:",
-        placeholder="https://github.com/username/repository",
-        help="Enter a public GitHub repository URL"
-    )
-    
-    fetch_option = st.checkbox(
-        "🌐 Fetch repository data automatically (requires internet)",
-        value=False,
-        help="Check this to automatically fetch repo data from GitHub API"
-    )
-    
-    if not fetch_option:
-        st.info("💡 **Tip:** Uncheck the box above and describe your repository manually below for faster results")
-        repo_description = st.text_area(
-            "Describe your repository:",
-            value="""Language: Python 3.11
-Framework: Flask
-Database: PostgreSQL
-
-Dependencies (from requirements.txt):
-flask==2.3.0
-gunicorn==20.1.0
-psycopg2-binary==2.9.5
-
-Main file: app.py""",
-            height=180,
-            help="Describe what's in your GitHub repository"
-        )
-    else:
-        repo_description = github_url  # Will be processed by GitHub fetcher
-
-# Generate button
-if st.button("🚀 Generate Deployment Configs"):
-    
-    # Handle GitHub URL fetching if selected
-    if input_method == "🔗 GitHub URL" and fetch_option:
-        with st.spinner('📡 Fetching repository data from GitHub...'):
-            try:
-                from github_fetcher import GitHubFetcher
-                fetcher = GitHubFetcher()
-                repo_description = fetcher.analyze_repository(github_url)
-                
-                if repo_description.startswith('Error'):
-                    st.error(repo_description)
-                    st.info("💡 **Tip:** Uncheck 'Fetch automatically' and describe your repository manually instead")
-                    st.stop()
-                else:
-                    st.success("✅ Successfully fetched repository data from GitHub!")
-            except Exception as e:
-                st.error(f"❌ Could not fetch from GitHub: {str(e)}")
-                st.info("💡 **Tip:** Describe your repository manually instead")
-                st.stop()
-    
-    with st.spinner('🤖 AI Agents working...'):
-        try:
-            orchestrator = DeployFlowOrchestrator()
-            result_json = orchestrator.orchestrate_deployment(repo_description)
-            result = json.loads(result_json)
-            st.session_state.results = result
-            st.session_state.orchestrator = orchestrator
-            st.success("✅ Generated successfully!")
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-
-# Display results (simplified)
-if st.session_state.results:
-    result = st.session_state.results
+# ────────────────────────────────────────────────
+# Sidebar – Controls & Info
+# ────────────────────────────────────────────────
+with st.sidebar:
+    st.header("🚀 DeployFlow")
+    st.caption("Fast, secure Docker setups for Karachi EdTech startups")
     
     st.markdown("---")
+    input_mode = st.radio("Input method", ["Paste repo content", "Upload files (coming soon)"], index=0)
     
-    # Quick summary
-    st.markdown("### 📊 Summary")
-    summary = result.get('summary', {})
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"**Tech Stack:** {summary.get('detected_stack', 'N/A')}")
-        st.markdown(f"**Platform:** {summary.get('deployment_platform', 'N/A')}")
-    with col2:
-        st.markdown(f"**Resources:** {summary.get('resources', 'N/A')}")
-        status = summary.get('security_status', 'UNKNOWN')
-        color = "🟢" if status == "APPROVED" else "🟡" if status == "REVIEW_REQUIRED" else "🔴"
-        st.markdown(f"**Security:** {color} {status}")
-    
-    # Generated files with download buttons
-    st.markdown("### 📥 Download Generated Files")
-    
-    files = result.get('generated_files', {})
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.download_button(
-            "📄 Dockerfile",
-            files.get('dockerfile', ''),
-            file_name="Dockerfile",
-            mime="text/plain",
-            use_container_width=True
-        )
-    
-    with col2:
-        st.download_button(
-            "📄 Kubernetes",
-            files.get('kubernetes', ''),
-            file_name="deployment.yaml",
-            mime="text/yaml",
-            use_container_width=True
-        )
-    
-    with col3:
-        st.download_button(
-            "📄 CI/CD Pipeline",
-            files.get('cicd', ''),
-            file_name="deploy.yml",
-            mime="text/yaml",
-            use_container_width=True
-        )
-    
-    # Details in expander
-    with st.expander("🔍 View File Contents"):
-        tab1, tab2, tab3 = st.tabs(["Dockerfile", "Kubernetes", "CI/CD"])
-        
-        with tab1:
-            st.code(files.get('dockerfile', ''), language='dockerfile')
-        
-        with tab2:
-            st.code(files.get('kubernetes', ''), language='yaml')
-        
-        with tab3:
-            st.code(files.get('cicd', ''), language='yaml')
-    
-    # Security details in expander
-    with st.expander("🔒 Security Validation Details"):
-        security = result.get('security_validation', {})
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Critical", security.get('critical', 0))
-        with col2:
-            st.metric("High", security.get('high', 0))
-        with col3:
-            st.metric("Medium", security.get('medium', 0))
-        with col4:
-            st.metric("Risk Score", f"{security.get('risk_score', 0)}/100")
-        
-        issues = security.get('issues', [])
-        if issues:
-            st.markdown("**Issues Found:**")
-            for issue in issues:
-                severity_icon = {
-                    'CRITICAL': '🔴',
-                    'HIGH': '🟠', 
-                    'MEDIUM': '🟡',
-                    'LOW': '🔵'
-                }.get(issue.get('severity'), '⚪')
-                st.markdown(f"{severity_icon} **{issue.get('severity')}**: {issue.get('message')}")
-                st.caption(f"Fix: {issue.get('fix')}")
-        else:
-            st.success("✅ No security issues found!")
+    st.markdown("---")
+    st.info("**Supported stacks (2026)**\n• Python: FastAPI, Flask, Django, Streamlit\n• Node.js: Express, Next.js")
+    st.caption("Paste a simulation of your repo structure & key files (requirements.txt, app.py, package.json, etc.)")
 
-# Footer
+# ────────────────────────────────────────────────
+# Main content
+# ────────────────────────────────────────────────
+st.title("Generate Production-Ready Docker Deployment")
+st.markdown("Paste your repository files/content below → get Dockerfile, docker-compose.yml + security report in seconds.")
+
+# ── Input area ───────────────────────────────────────
+if input_mode == "Paste repo content":
+    repo_input = st.text_area(
+        "Repository snapshot (file names + content)",
+        height=240,
+        placeholder="Example:\nrequirements.txt: fastapi==0.115.0\nuvicorn==0.32.0\n\nmain.py:\nfrom fastapi import FastAPI\napp = FastAPI()\n@app.get('/')\ndef root(): return {'msg': 'hello'}",
+        help="Include file names followed by : and content. One file per block. Focus on key files."
+    )
+else:
+    repo_input = ""
+    st.warning("File upload mode coming soon — drag & drop multiple files or zip archive")
+
+# ── Run button + spinner ─────────────────────────────
+if st.button("✨ Analyze & Generate Package", type="primary", use_container_width=True, disabled=not repo_input.strip()):
+    if not repo_input.strip():
+        st.error("Please provide some repository content.")
+        st.stop()
+
+    with st.spinner("DeployFlow agents at work... (Analyst → Architect → Coder → Security)"):
+        try:
+            # Step 1: Analyst
+            analysis_json = analyze_repository(repo_content=repo_input)
+            analysis = json.loads(analysis_json)
+
+            # Step 2: Architect
+            arch_json = recommend_architecture(analysis_json)
+            arch = json.loads(arch_json)
+
+            # Step 3: Coder
+            configs_json = generate_configs(analysis_json, arch_json)
+            configs = json.loads(configs_json)
+
+            # Inside the try block, replace the scanner lines with:
+
+            security_json = validate_configs(json.dumps(configs))
+            security_result = json.loads(security_json)
+
+            status = security_result.get("status", "UNKNOWN")
+            score = security_result.get("compliance_score", 0.0)
+            issues = security_result.get("issues", [])
+
+            # Step 4: Security (using your updated scanner)
+            
+            # scanner = SecurityScanner()
+            # # Assuming your scanner now accepts both dockerfile & docker_compose
+            # security_result = json.loads(scanner.validate(json.dumps(configs)))  # ← updated call
+
+            # status = security_result.get("status", "UNKNOWN")
+            # issues = security_result.get("issues", [])
+            # score = security_result.get("compliance_score", 0)
+
+            # ── Results layout ───────────────────────────────────
+            st.markdown("---")
+            cols = st.columns([2, 1])
+
+            with cols[0]:
+                st.subheader("Deployment Summary")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Language", analysis.get("language", "?").upper())
+                c2.metric("Framework", analysis.get("framework", "?").title())
+                c3.metric("Port", f"{analysis.get('port', '?')}")
+
+                st.markdown(f"**Platform**: {arch.get('platform', 'docker-single-container')}")
+                st.markdown(f"**Base image**: `{arch.get('base_image', 'n/a')}`")
+                st.markdown(f"**Resources**: {arch.get('resources', {})}")
+
+            with cols[1]:
+                if status == "APPROVED":
+                    st.success(f"✅ Approved\nSecurity Score: **{score:.1f}%**")
+                elif status == "REVIEW_REQUIRED":
+                    st.warning(f"⚠️ Review needed\nSecurity Score: **{score:.1f}%**")
+                else:
+                    st.error(f"🚫 Blocked\nSecurity Score: **{score:.1f}%**")
+
+                if score < 100:
+                    with st.expander("Security Issues", expanded=score < 90):
+                        if issues:
+                            for issue in issues:
+                                sev = issue.get("severity", "UNKNOWN")
+                                color = {"CRITICAL": "red", "HIGH": "orange", "MEDIUM": "blue"}.get(sev, "grey")
+                                st.markdown(f"**[{sev}]** {issue.get('message')}  \n{issue.get('fix', '')}", unsafe_allow_html=True)
+                        else:
+                            st.info("No issues detected")
+
+            # ── Code display ─────────────────────────────────────
+            tab1, tab2 = st.tabs(["Dockerfile", "docker-compose.yml"])
+
+            with tab1:
+                st.code(configs.get("dockerfile", "# No Dockerfile generated"), language="dockerfile", line_numbers=True)
+
+            with tab2:
+                st.code(configs.get("docker_compose", "# No compose file generated"), language="yaml", line_numbers=True)
+
+            # ── Download buttons ─────────────────────────────────
+            st.download_button(
+                label="📥 Download Dockerfile",
+                data=configs.get("dockerfile", ""),
+                file_name="Dockerfile",
+                mime="text/plain",
+                use_container_width=True
+            )
+
+            st.download_button(
+                label="📥 Download docker-compose.yml",
+                data=configs.get("docker_compose", ""),
+                file_name="docker-compose.yml",
+                mime="text/yaml"
+            )
+
+        except json.JSONDecodeError as e:
+            st.error(f"JSON parsing failed in agent output:\n{str(e)}")
+        except Exception as e:
+            st.error("Unexpected error during generation")
+            with st.expander("Details (for debugging)"):
+                st.code(traceback.format_exc(), language="python")
+
+# ── Footer / Help ────────────────────────────────────────
 st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: #666; font-size: 0.9rem;'>"
-    "Built with IBM watsonx Orchestrate | IBM Dev Day Hackathon 2026"
-    "</div>",
-    unsafe_allow_html=True
-)
+st.caption("DeployFlow • Built for Karachi EdTech teams • Powered by Groq + LangChain • v1.0 (Feb 2026)")

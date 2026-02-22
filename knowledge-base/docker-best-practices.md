@@ -1,149 +1,78 @@
-# Docker Best Practices
+# Docker Best Practices – DeployFlow Edition (Karachi EdTech Context 2026)
 
-## Image Optimization
+## Core Principles
 
-### Use Specific Base Image Tags
-❌ **Bad**: `FROM python:latest`
-✅ **Good**: `FROM python:3.11-slim`
+1. Use small, official base images (alpine/slim variants)
+   - python:3.11-slim / python:3.12-slim-bookworm
+   - node:20-alpine / node:22-alpine
+   - Avoid :latest – always pin versions
 
-**Why**: Ensures reproducible builds and smaller image size.
+2. Never run as root
+   - Create non-root user + group in every image
+   - USER appuser (or similar) before CMD/ENTRYPOINT
 
-### Multi-Stage Builds
-Use multi-stage builds to reduce final image size:
-```dockerfile
-# Build stage
-FROM node:18 AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
+3. Multi-stage builds when appropriate
+   Especially useful for:
+   - Node/React/Next.js frontend → copy only /app/.next or /app/build
+   - Python with heavy build deps (numpy/pandas/scipy) → separate build & runtime stage
 
-# Production stage
-FROM node:18-alpine
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-CMD ["node", "dist/server.js"]
-```
+4. Minimize layers & image size
+   - Combine RUN commands when possible
+   - Use --no-cache-dir for pip
+   - Use npm ci --only=production
+   - COPY only what's needed (.dockerignore is mandatory)
 
-### Layer Caching
-Order instructions from least to most frequently changed:
-```dockerfile
-# 1. Base image (rarely changes)
-FROM python:3.11-slim
+5. Security defaults
+   - No hardcoded secrets (ENV only for defaults)
+   - HEALTHCHECK mandatory for web services
+   - No unnecessary EXPOSE (only the actual app port)
+   - No privileged containers
 
-# 2. System dependencies (rarely change)
-RUN apt-get update && apt-get install -y curl
+6. Health & readiness
+   - HEALTHCHECK interval 20–30s, start-period 5–10s
+   - Prefer /health or /healthz endpoint if available
 
-# 3. Application dependencies (change occasionally)
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+## EdTech-specific recommendations
 
-# 4. Application code (changes frequently)
-COPY . .
-```
+- Streamlit apps
+  - streamlit run --server.port=$PORT --server.address=0.0.0.0
+  - Expose 8501 internally, map externally if needed
 
-## Security Best Practices
+- FastAPI / Uvicorn
+  - Prefer gunicorn + uvicorn workers on production (2–4 workers)
+  - --preload if using large models
 
-### Don't Run as Root
-```dockerfile
-RUN useradd -m appuser
-USER appuser
-```
+- Django
+  - Use gunicorn + whitenoise for static files
+  - Collectstatic in Dockerfile or entrypoint
 
-### Don't Include Secrets
-❌ **Never**: `ENV API_KEY=secret123`
-✅ **Use**: Environment variables at runtime or secrets management
+- Next.js
+  - Build → output standalone or .next
+  - Can run with node server.js or next start
+  - Consider static export + nginx when no dynamic API needed
 
-### Minimize Attack Surface
-```dockerfile
-# Remove unnecessary packages
-RUN apt-get update && apt-get install -y \
-    required-package \
-    && rm -rf /var/lib/apt/lists/*
-```
+- Exam / high-concurrency periods
+  - Use connection pooling (PgBouncer, Redis)
+  - Rate limiting / caching layer (Redis/memcached)
+  - Read replicas when possible
 
-### Scan for Vulnerabilities
-- Use `docker scan` or IBM Cloud Container Registry scanning
-- Keep base images updated
-- Monitor for CVEs
+- Fee collection / payment gateways
+  - Never log full card / transaction data
+  - Use webhooks + background tasks (celery / dramatiq / rq)
 
-## Size Optimization
+## Common .dockerignore content
 
-### Use Alpine Images When Possible
-```dockerfile
-FROM python:3.11-alpine  # ~50MB
-# vs
-FROM python:3.11         # ~900MB
-```
-
-### Use .dockerignore
-```
-node_modules
 .git
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
 .env
+*.env*
 *.log
-test/
-```
-
-### Combine RUN Commands
-❌ **Bad**: 
-```dockerfile
-RUN apt-get update
-RUN apt-get install -y curl
-RUN apt-get clean
-```
-
-✅ **Good**:
-```dockerfile
-RUN apt-get update && \
-    apt-get install -y curl && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-```
-
-## Health Checks
-
-### Add Health Check Endpoints
-```dockerfile
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
-  CMD curl -f http://localhost:8080/health || exit 1
-```
-
-## Port Configuration
-
-### Standard Ports by Framework
-- Python Flask/Django: 8080 or 5000
-- Node.js Express: 3000
-- Java Spring Boot: 8080
-- Go: 8080
-
-### Use ARG for Flexibility
-```dockerfile
-ARG PORT=8080
-EXPOSE ${PORT}
-ENV PORT=${PORT}
-```
-
-## Logging
-
-### Log to STDOUT/STDERR
-```dockerfile
-ENV PYTHONUNBUFFERED=1
-```
-
-### Don't Write Logs to Files in Container
-Containers are ephemeral - use stdout and let orchestration handle logging.
-
-## IBM Cloud Specific
-
-### Use IBM Container Registry
-- Automatic vulnerability scanning
-- Regional registries for faster pulls
-- Integration with IBM Cloud services
-
-### Optimize for Code Engine
-- Keep images under 1GB when possible
-- Use health checks
-- Set resource limits appropriately
+node_modules
+npm-debug.log
+.next/cache

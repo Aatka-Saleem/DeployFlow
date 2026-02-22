@@ -1,28 +1,20 @@
-# This is a template - variables will be replaced by the Coder Agent
-# Variables: {NODE_VERSION}, {PORT}, {MAIN_FILE}
-
-FROM node:{NODE_VERSION}-alpine
+# syntax=docker/dockerfile:1
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files first for better caching
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --only=production && npm cache clean --force
 
-# Copy application code
 COPY . .
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
-RUN chown -R nodejs:nodejs /app
-USER nodejs
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 
-# Expose application port
-EXPOSE {PORT}
+EXPOSE ${PORT:-3000}
 
-# Set environment variables
-ENV NODE_ENV=production
-ENV PORT={PORT}
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-3000}/ || exit 1
 
-# Start Node.js application
-CMD ["node", "{MAIN_FILE}"]
+# CMD usually overridden
+CMD ["npm", "start"]

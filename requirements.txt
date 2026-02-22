@@ -1,7 +1,16 @@
-ibm-watsonx-orchestrate
-ibm-watsonx-ai
-python-dotenv
-requests
-pypdf
-streamlit>=1.28.0
-requests>=2.31.0
+# LLM & Orchestration
+langchain-groq>=1.1.0            # or ==1.1.2 if you want to freeze
+python-dotenv==1.0.1
+
+# Web Interface & API
+streamlit>=1.53.0                # or ==1.54.0
+fastapi>=0.128.0                 # or ==0.129.2
+uvicorn>=0.30.0                  # or latest ~0.33–0.34
+
+# Data & Configuration
+pyyaml>=6.0.1
+pydantic>=2.8.0                  # or latest 2.10+/2.11+
+
+# Utilities
+requests>=2.32.0
+python-multipart>=0.0.9

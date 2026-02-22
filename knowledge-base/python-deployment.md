@@ -1,93 +1,42 @@
-# Python Application Deployment Guide
+# Python Deployment Patterns – DeployFlow Recommendations
 
-## Overview
-Best practices for deploying Python applications using containers and IBM Cloud.
+## Recommended patterns by framework (2026)
 
-## Recommended Dockerfile Structure
+1. FastAPI
+   - Base image: python:3.11-slim or python:3.12-slim
+   - Server: gunicorn + uvicorn.workers.UvicornWorker
+   - Workers: 2–4 (scale with CPU)
+   - CMD example:
+     ["gunicorn", "main:app", "--workers", "3", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
 
-### For Web Applications (Flask/Django/FastAPI)
-```dockerfile
-FROM python:3.11-slim
+2. Flask
+   - Same base image
+   - gunicorn + sync workers (or gevent/eventlet for async)
+   - CMD example:
+     ["gunicorn", "app:app", "--workers", "4", "--bind", "0.0.0.0:5000"]
 
-WORKDIR /app
+3. Django
+   - Base image: python:3.11-slim
+   - Collect static in Dockerfile or entrypoint.sh
+   - Use whitenoise or dedicated nginx for static/media
+   - CMD: gunicorn project.wsgi:application --workers 3 --bind 0.0.0.0:8000
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+4. Streamlit
+   - Base image: python:3.11-slim
+   - Install streamlit in requirements.txt
+   - CMD: ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.enableCORS=false"]
 
-# Copy application code
-COPY . .
+5. Celery / background workers
+   - Separate service in docker-compose
+   - CMD: ["celery", "-A", "tasks", "worker", "--loglevel=info"]
+   - Use flower for monitoring (optional separate service)
 
-# Create non-root user
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
+## Common environment variables
 
-# Expose port
-EXPOSE 8080
-
-# Use production server
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "2", "app:app"]
-```
-
-### For ML/Data Science Applications
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install system dependencies for ML libraries
-RUN apt-get update && apt-get install -y \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
-
-EXPOSE 8080
-
-CMD ["python", "main.py"]
-```
-
-## Resource Recommendations
-
-### Small Python Web App
-- **CPU**: 0.5 vCPU
-- **Memory**: 512MB
-- **Replicas**: 2
-- **Auto-scaling**: 2-5 pods
-
-### Python ML Application
-- **CPU**: 1-2 vCPU
-- **Memory**: 2GB - 4GB
-- **Replicas**: 1-3
-- **GPU**: Optional for inference
-
-### Python API Server
-- **CPU**: 1 vCPU
-- **Memory**: 1GB
-- **Replicas**: 3
-- **Auto-scaling**: 3-10 pods
-
-## Common Dependencies
-- **Flask**: Use gunicorn (production server)
-- **Django**: Use gunicorn or uwsgi
-- **FastAPI**: Use uvicorn workers
-- **NumPy/Pandas**: May need more memory
-- **TensorFlow/PyTorch**: Likely needs GPU
-
-## Environment Variables
-- `PORT`: Application port (default 8080)
-- `WORKERS`: Number of worker processes (default 2)
-- `PYTHONUNBUFFERED`: Set to 1 for logging
-- `LOG_LEVEL`: INFO or DEBUG
-
-## IBM Code Engine Settings
-- Use Python buildpack auto-detection
-- Set min instances to 0 for cost savings
-- Enable auto-scaling based on CPU/requests
-- Use secrets for sensitive configuration
+- PYTHONUNBUFFERED=1
+- PYTHONDONTWRITEBYTECODE=1
+- PIP_NO_CACHE_DIR=1
+- PORT (fallback 8000)
+- DATABASE_URL / REDIS_URL
+- SECRET_KEY (never hardcoded)
+- DEBUG=false (production)
